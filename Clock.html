@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analog Clock</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --hands: #e07a3d;
+      --ticks: #e07a3d;
+      --bg: #ffffff;
+      --text: #e07a3d;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Outfit", system-ui, sans-serif;
+      overflow: hidden;
+    }
+
+    body.editing {
+      overflow: auto;
+    }
+
+    .widget {
+      min-height: 100%;
+      width: 100%;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
+
+    body.editing .widget {
+      min-height: calc(100% - 220px);
+    }
+
+    .clock {
+      --size: min(86vmin, 340px);
+      position: relative;
+      width: var(--size);
+      height: var(--size);
+    }
+
+    .tick {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 2.5px;
+      height: 12px;
+      margin-left: -1.25px;
+      background: var(--ticks);
+      border-radius: 2px;
+      transform-origin: center calc(var(--size) / 2);
+    }
+
+    .tick.major {
+      width: 3.5px;
+      height: 18px;
+      margin-left: -1.75px;
+    }
+
+    .tick-number {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 2em;
+      margin-left: -1em;
+      text-align: center;
+      font-size: calc(var(--size) * 0.065);
+      font-weight: 600;
+      color: var(--ticks);
+      transform-origin: center center;
+      user-select: none;
+      line-height: 1;
+    }
+
+    .hand {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      border-radius: 999px;
+      background: var(--hands);
+      transform-origin: 50% 100%;
+      will-change: transform;
+    }
+
+    .hand.hour {
+      width: 6px;
+      height: 27%;
+      margin-left: -3px;
+      margin-top: -27%;
+      opacity: 0.95;
+    }
+
+    .hand.minute {
+      width: 4px;
+      height: 35%;
+      margin-left: -2px;
+      margin-top: -35%;
+      opacity: 0.85;
+    }
+
+    .hand.second {
+      width: 2px;
+      height: 41%;
+      margin-left: -1px;
+      margin-top: -41%;
+      opacity: 0.7;
+    }
+
+    .pivot {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      margin: -5px 0 0 -5px;
+      border-radius: 50%;
+      background: var(--hands);
+      z-index: 3;
+    }
+
+    .digital {
+      position: absolute;
+      left: 50%;
+      top: 66%;
+      transform: translateX(-50%);
+      font-size: calc(var(--size) * 0.078);
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      color: var(--hands);
+      z-index: 2;
+    }
+
+    .edit-toggle {
+      position: fixed;
+      right: 12px;
+      bottom: 12px;
+      z-index: 20;
+      border: none;
+      border-radius: 999px;
+      padding: 0.55rem 0.9rem;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      font: 600 0.8rem/1 "Outfit", system-ui, sans-serif;
+      cursor: pointer;
+    }
+
+    .panel {
+      display: none;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 15;
+      background: #111;
+      color: #f3f3f3;
+      padding: 1rem 1.1rem 1.25rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 0.85rem;
+    }
+
+    body.editing .panel {
+      display: block;
+    }
+
+    body.editing .edit-toggle {
+      bottom: auto;
+      top: 12px;
+    }
+
+    /* Embed / iframe: clock only — never show configure UI */
+    body.embed .edit-toggle,
+    body.embed .panel {
+      display: none !important;
+    }
+
+    .panel h2 {
+      font-size: 0.95rem;
+      margin-bottom: 0.75rem;
+      font-weight: 700;
+    }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.75rem 1rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .field label {
+      opacity: 0.75;
+      font-size: 0.75rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .field select,
+    .field input[type="color"],
+    .field input[type="text"] {
+      width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      background: #1c1c1c;
+      color: #fff;
+      padding: 0.45rem 0.55rem;
+      font: inherit;
+    }
+
+    .field input[type="color"] {
+      padding: 0.2rem;
+      height: 2.1rem;
+      cursor: pointer;
+    }
+
+    .url-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .url-row input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      background: #1c1c1c;
+      color: #fff;
+      padding: 0.5rem 0.65rem;
+      font: 500 0.78rem/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .url-row button {
+      border: none;
+      border-radius: 8px;
+      padding: 0.55rem 0.8rem;
+      background: var(--hands, #e07a3d);
+      color: #111;
+      font: 700 0.8rem/1 "Outfit", system-ui, sans-serif;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .hint {
+      margin-top: 0.55rem;
+      opacity: 0.6;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="widget">
+    <div class="clock" id="clock" aria-label="Analog clock">
+      <div class="hand hour" id="hour"></div>
+      <div class="hand minute" id="minute"></div>
+      <div class="hand second" id="second"></div>
+      <div class="pivot"></div>
+      <div class="digital" id="digital"></div>
+    </div>
+  </div>
+
+  <button class="edit-toggle" id="editToggle" type="button">Configure</button>
+
+  <aside class="panel" id="panel">
+    <h2>Clock settings</h2>
+    <div class="panel-grid">
+      <div class="field">
+        <label for="timezone">Timezone</label>
+        <select id="timezone"></select>
+      </div>
+      <div class="field">
+        <label for="markers">Ticks</label>
+        <select id="markers">
+          <option value="ticks">Ticks</option>
+          <option value="time">Time (1–12)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="hands">Hands color</label>
+        <input type="color" id="hands" value="#e07a3d">
+      </div>
+      <div class="field">
+        <label for="ticks">Ticks color</label>
+        <input type="color" id="ticks" value="#e07a3d">
+      </div>
+      <div class="field">
+        <label for="bg">Background</label>
+        <input type="color" id="bg" value="#ffffff">
+      </div>
+    </div>
+    <div class="field">
+      <label for="embedUrl">Embed URL</label>
+      <div class="url-row">
+        <input id="embedUrl" type="text" readonly>
+        <button type="button" id="copyUrl">Copy</button>
+      </div>
+    </div>
+    <p class="hint">
+      Copy the Embed URL for Notion (<code>/embed</code>). That link shows only the clock.
+      Open this page without <code>embed=1</code> to configure again.
+    </p>
+  </aside>
+
+  <script>
+    const DEFAULTS = {
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      hands: "#e07a3d",
+      ticks: "#e07a3d",
+      bg: "#ffffff",
+      markers: "ticks"
+    };
+
+    const TIMEZONES = [
+      "UTC",
+      "America/Los_Angeles",
+      "America/Denver",
+      "America/Chicago",
+      "America/New_York",
+      "America/Sao_Paulo",
+      "Europe/London",
+      "Europe/Paris",
+      "Europe/Berlin",
+      "Europe/Moscow",
+      "Africa/Cairo",
+      "Asia/Dubai",
+      "Asia/Kolkata",
+      "Asia/Bangkok",
+      "Asia/Singapore",
+      "Asia/Shanghai",
+      "Asia/Tokyo",
+      "Australia/Sydney",
+      "Pacific/Auckland"
+    ];
+
+    const clock = document.getElementById("clock");
+    const hourHand = document.getElementById("hour");
+    const minuteHand = document.getElementById("minute");
+    const secondHand = document.getElementById("second");
+    const digital = document.getElementById("digital");
+    const editToggle = document.getElementById("editToggle");
+    const timezoneSelect = document.getElementById("timezone");
+    const markersSelect = document.getElementById("markers");
+    const handsInput = document.getElementById("hands");
+    const ticksInput = document.getElementById("ticks");
+    const bgInput = document.getElementById("bg");
+    const embedUrlInput = document.getElementById("embedUrl");
+    const copyUrlBtn = document.getElementById("copyUrl");
+
+    let config = { ...DEFAULTS };
+    let markerNodes = [];
+
+    function normalizeColor(value, fallback) {
+      if (!value) return fallback;
+      const raw = decodeURIComponent(String(value)).trim();
+      if (/^#[0-9a-f]{3}$/i.test(raw)) {
+        return "#" + raw.slice(1).split("").map((c) => c + c).join("").toLowerCase();
+      }
+      if (/^#[0-9a-f]{6}$/i.test(raw)) return raw.toLowerCase();
+      if (/^[0-9a-f]{6}$/i.test(raw)) return "#" + raw.toLowerCase();
+      return fallback;
+    }
+
+    function readConfigFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const tz = params.get("tz") || params.get("timezone") || DEFAULTS.tz;
+      const markers = (params.get("markers") || DEFAULTS.markers).toLowerCase();
+      return {
+        tz,
+        hands: normalizeColor(params.get("hands") || params.get("color"), DEFAULTS.hands),
+        ticks: normalizeColor(params.get("ticks"), params.get("hands") || params.get("color") || DEFAULTS.ticks),
+        bg: normalizeColor(params.get("bg") || params.get("background"), DEFAULTS.bg),
+        markers: markers === "time" || markers === "numbers" ? "time" : "ticks"
+      };
+    }
+
+    function isEmbedView() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("embed") === "1") return true;
+      try {
+        return window.self !== window.top;
+      } catch {
+        return true;
+      }
+    }
+
+    function setConfigParams(url, cfg) {
+      url.searchParams.set("tz", cfg.tz);
+      url.searchParams.set("hands", cfg.hands);
+      url.searchParams.set("ticks", cfg.ticks);
+      url.searchParams.set("bg", cfg.bg);
+      url.searchParams.set("markers", cfg.markers);
+    }
+
+    // Clean Notion / iframe URL — clock only
+    function buildEmbedUrl(cfg) {
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.searchParams.set("embed", "1");
+      setConfigParams(url, cfg);
+      return url.toString();
+    }
+
+    // Full page URL — used while configuring (includes Configure button)
+    function buildConfigUrl(cfg, { editing = false } = {}) {
+      const url = new URL(window.location.href);
+      url.search = "";
+      setConfigParams(url, cfg);
+      if (editing) url.searchParams.set("edit", "1");
+      return url.toString();
+    }
+
+    function applyTheme(cfg) {
+      document.documentElement.style.setProperty("--hands", cfg.hands);
+      document.documentElement.style.setProperty("--ticks", cfg.ticks);
+      document.documentElement.style.setProperty("--bg", cfg.bg);
+      document.documentElement.style.setProperty("--text", cfg.hands);
+    }
+
+    function clearMarkers() {
+      markerNodes.forEach((node) => node.remove());
+      markerNodes = [];
+    }
+
+    function renderMarkers(mode) {
+      clearMarkers();
+
+      if (mode === "time") {
+        for (let i = 1; i <= 12; i++) {
+          const el = document.createElement("div");
+          el.className = "tick-number";
+          el.textContent = String(i);
+          const angle = i * 30;
+          el.style.transform =
+            `rotate(${angle}deg) translateY(calc(var(--size) * -0.42)) rotate(${-angle}deg)`;
+          clock.insertBefore(el, hourHand);
+          markerNodes.push(el);
+        }
+        return;
+      }
+
+      for (let i = 0; i < 12; i++) {
+        const el = document.createElement("div");
+        el.className = "tick" + (i % 3 === 0 ? " major" : "");
+        el.style.transform = `rotate(${i * 30}deg)`;
+        clock.insertBefore(el, hourHand);
+        markerNodes.push(el);
+      }
+    }
+
+    function populateTimezoneSelect(selected) {
+      const zones = new Set(TIMEZONES);
+      if (selected) zones.add(selected);
+
+      const sorted = Array.from(zones).sort((a, b) => a.localeCompare(b));
+      timezoneSelect.innerHTML = "";
+      for (const zone of sorted) {
+        const option = document.createElement("option");
+        option.value = zone;
+        option.textContent = zone.replace(/_/g, " ");
+        timezoneSelect.appendChild(option);
+      }
+      timezoneSelect.value = selected;
+    }
+
+    function syncForm(cfg) {
+      if (document.body.classList.contains("embed")) return;
+      populateTimezoneSelect(cfg.tz);
+      markersSelect.value = cfg.markers;
+      handsInput.value = cfg.hands;
+      ticksInput.value = cfg.ticks;
+      bgInput.value = cfg.bg;
+      embedUrlInput.value = buildEmbedUrl(cfg);
+    }
+
+    function applyConfig(cfg, { pushUrl = false } = {}) {
+      config = cfg;
+      applyTheme(cfg);
+      renderMarkers(cfg.markers);
+      syncForm(cfg);
+
+      if (pushUrl && !document.body.classList.contains("embed")) {
+        const editing = document.body.classList.contains("editing");
+        history.replaceState({}, "", buildConfigUrl(cfg, { editing }));
+        if (embedUrlInput) embedUrlInput.value = buildEmbedUrl(cfg);
+      }
+    }
+
+    function getPartsInTimeZone(date, timeZone) {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        hourCycle: "h23",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+      }).formatToParts(date);
+
+      const map = {};
+      for (const part of parts) {
+        if (part.type !== "literal") map[part.type] = part.value;
+      }
+
+      return {
+        hour: Number(map.hour),
+        minute: Number(map.minute),
+        second: Number(map.second)
+      };
+    }
+
+    function pad(n) {
+      return n < 10 ? "0" + n : String(n);
+    }
+
+    function toTwelve(hour) {
+      const h = hour % 12;
+      return h === 0 ? 12 : h;
+    }
+
+    function update() {
+      const now = new Date();
+      let hour24;
+      let minute;
+      let second;
+
+      try {
+        const parts = getPartsInTimeZone(now, config.tz);
+        hour24 = parts.hour;
+        minute = parts.minute;
+        second = parts.second;
+      } catch {
+        hour24 = now.getHours();
+        minute = now.getMinutes();
+        second = now.getSeconds();
+      }
+
+      // Smooth second hand within the selected timezone second
+      const ms = now.getMilliseconds();
+      const seconds = second + ms / 1000;
+      const minutes = minute + seconds / 60;
+      const hours12 = (hour24 % 12) + minutes / 60;
+
+      hourHand.style.transform = `rotate(${hours12 * 30}deg)`;
+      minuteHand.style.transform = `rotate(${minutes * 6}deg)`;
+      secondHand.style.transform = `rotate(${seconds * 6}deg)`;
+
+      const h = toTwelve(hour24);
+      digital.textContent = `${h}:${pad(minute)}:${pad(second)} ${hour24 >= 12 ? "PM" : "AM"}`;
+    }
+
+    function onFormChange() {
+      applyConfig(
+        {
+          tz: timezoneSelect.value,
+          hands: handsInput.value,
+          ticks: ticksInput.value,
+          bg: bgInput.value,
+          markers: markersSelect.value
+        },
+        { pushUrl: true }
+      );
+    }
+
+    timezoneSelect.addEventListener("change", onFormChange);
+    markersSelect.addEventListener("change", onFormChange);
+    handsInput.addEventListener("input", onFormChange);
+    ticksInput.addEventListener("input", onFormChange);
+    bgInput.addEventListener("input", onFormChange);
+
+    editToggle.addEventListener("click", () => {
+      if (document.body.classList.contains("embed")) return;
+
+      const editing = !document.body.classList.contains("editing");
+      document.body.classList.toggle("editing", editing);
+      editToggle.textContent = editing ? "Done" : "Configure";
+      history.replaceState({}, "", buildConfigUrl(config, { editing }));
+      embedUrlInput.value = buildEmbedUrl(config);
+    });
+
+    copyUrlBtn.addEventListener("click", async () => {
+      const value = buildEmbedUrl(config);
+      embedUrlInput.value = value;
+      try {
+        await navigator.clipboard.writeText(value);
+        copyUrlBtn.textContent = "Copied";
+        setTimeout(() => {
+          copyUrlBtn.textContent = "Copy";
+        }, 1200);
+      } catch {
+        embedUrlInput.select();
+      }
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    const embedView = isEmbedView();
+
+    if (embedView) {
+      document.body.classList.add("embed");
+      document.body.classList.remove("editing");
+      editToggle.remove();
+      document.getElementById("panel").remove();
+    } else if (params.get("edit") === "1") {
+      document.body.classList.add("editing");
+      editToggle.textContent = "Done";
+    }
+
+    applyConfig(readConfigFromUrl());
+    update();
+    setInterval(update, 50);
+  </script>
+</body>
+</html>
